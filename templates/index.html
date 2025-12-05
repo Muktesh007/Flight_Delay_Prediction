@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Delay Predictor</title>
+    <style>
+        /* Reset */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* Typography & page */
+        body {
+            font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #ffffff; /* pure light theme background */
+            color: #0f172a; /* slate-900 */
+            min-height: 100vh;
+            padding: 2.0rem;
+            -webkit-font-smoothing:antialiased;
+        }
+
+        .container { max-width: 920px; margin: 0 auto; }
+
+        /* Header */
+        .header { text-align: left; margin-bottom: 1.25rem; }
+        .header h1 { font-size: 1.6rem; color: #0b5cff; font-weight: 700; margin-bottom: 0.15rem; }
+        .header p { color: #475569; font-size: 0.95rem; }
+
+        /* Card styles */
+        .input-card, .results-section, .chart-card {
+            background: #ffffff;
+            border: 1px solid #e6eef8; /* very light border */
+            border-radius: 10px;
+            padding: 1.25rem;
+            box-shadow: 0 6px 18px rgba(15,23,42,0.04);
+            margin-bottom: 1rem;
+        }
+
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem; }
+        .input-item { display:flex; flex-direction:column; }
+
+        .input-item label { font-size: 0.78rem; color: #334155; font-weight: 600; margin-bottom: 0.35rem; }
+        .input-item input, .input-item select {
+            padding: 0.6rem 0.75rem; border-radius: 8px; border: 1px solid #dbeafe; background: #fbfdff; font-size: 0.95rem; color: #0f172a;
+            transition: box-shadow .12s ease, border-color .12s ease;
+        }
+
+        .input-item input:focus, .input-item select:focus {
+            outline: none; box-shadow: 0 6px 18px rgba(11,92,255,0.08); border-color: #0b5cff;
+        }
+
+        /* Range */
+        .input-range { display:flex; align-items:center; gap:0.75rem }
+        .input-range input[type="range"] { flex:1; height:8px; appearance:none; background:linear-gradient(90deg,#dbeafe,#e6f0ff); border-radius:8px }
+        .input-range input[type="range"]::-webkit-slider-thumb { appearance:none; width:18px; height:18px; border-radius:50%; background:#0b5cff; box-shadow:0 4px 10px rgba(11,92,255,0.18); border:3px solid #fff }
+        .range-value { font-weight:700; color:#0b5cff; background:#f1f8ff; padding:0.25rem 0.5rem; border-radius:6px }
+
+        /* Primary action */
+        .predict-button { width:100%; padding:0.85rem; background:#0b5cff; color:white; border:none; border-radius:10px; font-weight:700; font-size:0.98rem; cursor:pointer; box-shadow:0 8px 24px rgba(11,92,255,0.12); transition:transform .12s ease }
+        .predict-button:hover { transform:translateY(-2px) }
+        .predict-button:disabled { opacity:0.6; cursor:not-allowed }
+
+        /* Results layout */
+        .results-grid { display:grid; grid-template-columns:120px 1fr; gap:1rem; align-items:center }
+        .risk-badge { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0.85rem; border-radius:8px; min-height:90px }
+        .risk-badge.high { background:#fff7f7; border:1px solid #fee2e2; color:#b91c1c }
+        .risk-badge.moderate { background:#fffbf0; border:1px solid #fef3c7; color:#92400e }
+        .risk-badge.low { background:#f7fffb; border:1px solid #dcfce7; color:#166534 }
+        .risk-badge .emoji { font-size:2rem }
+        .risk-badge .label { font-weight:700; font-size:0.9rem; margin-top:6px }
+        .risk-badge .percent { font-weight:800; font-size:1.2rem; margin-top:6px }
+
+        .gauge-image { width:100%; height:auto; border-radius:8px }
+
+        .recommendation { padding:1rem; border-radius:8px; margin-top:0.5rem; font-size:0.95rem }
+
+        /* Tabs */
+        .tabs { display:flex; gap:0; margin:1.25rem 0 0.75rem 0; border-bottom:1px solid #eef2ff }
+        .tab-button { padding:0.6rem 0.9rem; background:transparent; border:none; color:#475569; font-weight:700; cursor:pointer }
+        .tab-button.active { color:#0b5cff; border-bottom:3px solid #0b5cff }
+
+        /* Charts */
+        .chart-card h3 { color:#0f172a; font-size:0.95rem; margin-bottom:0.6rem }
+
+        /* Loading */
+        .spinner { border:3px solid #f3f4f6; border-top:3px solid #0b5cff; border-radius:50%; width:20px; height:20px; animation:spin 1s linear infinite; display:inline-block; margin-right:0.5rem }
+        @keyframes spin { to { transform:rotate(360deg) } }
+        .loading-text { display:flex; align-items:center; color:#0b5cff; font-weight:700; padding:0.8rem }
+
+        /* Footer */
+        .footer { text-align:center; margin-top:1.25rem; color:#64748b; font-size:0.85rem }
+
+        /* Responsive */
+        @media (max-width: 760px) { .input-grid { grid-template-columns:1fr } .results-grid { grid-template-columns:1fr } .header { text-align:center } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>✈️ Flight Delay Predictor</h1>
+            <p>Quick risk assessment powered by AI</p>
+        </div>
+
+        <!-- Input Card -->
+        <div id="server-status" style="margin-bottom:0.75rem; display:none; padding:0.75rem; border-radius:8px; font-weight:700; border:1px solid #f8d7da; background:#fff7f7; color:#7f1d1d;">
+            <!-- server status banner populated by JS -->
+        </div>
+
+        <div class="input-card">
+            <div class="input-grid">
+                <div class="input-item">
+                    <label>📅 Flight Date</label>
+                    <input type="date" id="flight-date" value="2025-12-05">
+                </div>
+                <div class="input-item">
+                    <label>✈️ Airline</label>
+                    <select id="airline">
+                        {% for airline in airlines %}
+                            <option value="{{ airline }}" {% if airline == 'DL' %}selected{% endif %}>{{ airline }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="input-grid">
+                <div class="input-item">
+                    <label>🛫 Start Airport</label>
+                    <select id="origin-airport">
+                        {% for ap in airports %}<option value="{{ ap }}" {% if ap == airports[0] %}selected{% endif %}>{{ ap }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="input-item">
+                    <label>🛬 Destination Airport</label>
+                    <select id="destination-airport">
+                        {% for ap in airports %}<option value="{{ ap }}" {% if ap == airports[1] %}selected{% endif %}>{{ ap }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="input-grid">
+                <div class="input-item">
+                    <label>📏 Distance (mi)</label>
+                    <input type="number" id="distance" min="50" max="5000" value="1000">
+                </div>
+                <div class="input-item">
+                    <label>⏰ Departure Hour</label>
+                    <div class="input-range">
+                        <input type="range" id="dep-hour" min="0" max="23" value="10">
+                        <span class="range-value" id="hour-value">10:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-grid">
+                <div class="input-item">
+                    <label>🕒 Arrival Time (HH:MM)</label>
+                    <input type="time" id="scheduled-arrival" value="12:00" max="23:59">
+                </div>
+            </div>
+
+            <button class="predict-button" id="predict-btn" style="margin-top: 1rem;">🔍 Predict</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-button active" data-tab="prediction">Results</button>
+            <button class="tab-button" data-tab="analytics">Analytics</button>
+        </div>
+
+        <!-- Prediction Tab -->
+        <div id="prediction" class="tab-content active">
+            <div id="results-container"></div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="analytics" class="tab-content">
+            <div class="chart-card">
+                <h3>📈 Industry Statistics</h3>
+                <img id="stats-chart" src="" alt="Statistics" style="display:none;">
+            </div>
+            <div class="chart-card">
+                <h3>⏱️ Delays by Hour</h3>
+                <img id="hourly-chart" src="" alt="Hourly" style="display:none;">
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            🔐 Model accuracy: 92% • Historical data-based predictions
+        </div>
+    </div>
+
+    <script>
+        const predictBtn = document.getElementById('predict-btn');
+        const dateInput = document.getElementById('flight-date');
+        const depHourInput = document.getElementById('dep-hour');
+        const hourValue = document.getElementById('hour-value');
+        const resultsContainer = document.getElementById('results-container');
+        const tabButtons = document.querySelectorAll('.tab-button');
+
+        depHourInput.addEventListener('input', () => {
+            const h = parseInt(depHourInput.value);
+            hourValue.textContent = `${String(h).padStart(2, '0')}:00`;
+        });
+
+        // Function to calculate departure block based on hour
+        function getDepBlock(hour) {
+            if (hour >= 0 && hour < 6) return '0-5';
+            if (hour >= 6 && hour < 12) return '6-11';
+            if (hour >= 12 && hour < 18) return '12-17';
+            return '18-23'; // 18-23
+        }
+
+        // Function to calculate day of week from date (0=Sunday, 1=Monday, ..., 6=Saturday)
+        function getDayOfWeek(dateString) {
+            const date = new Date(dateString + 'T00:00:00');
+            const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+            return dayOfWeek;
+        }
+
+        // Initialize tab visibility based on the active class
+        document.querySelectorAll('.tab-content').forEach(c => {
+            if (c.classList.contains('active')) c.style.display = 'block'; else c.style.display = 'none';
+        });
+
+        // Use event delegation for tab switching to ensure robust behavior
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-tab]');
+            if (!btn) return;
+            const tab = btn.getAttribute('data-tab');
+
+            // Toggle active state for tab buttons
+            document.querySelectorAll('.tab-button').forEach(b => b.classList.toggle('active', b === btn));
+
+            // Show/hide tab content explicitly
+            document.querySelectorAll('.tab-content').forEach(c => {
+                if (c.id === tab) { c.classList.add('active'); c.style.display = 'block'; } else { c.classList.remove('active'); c.style.display = 'none'; }
+            });
+
+            if (tab === 'analytics') loadAnalytics();
+        });
+
+        predictBtn.addEventListener('click', async () => {
+            const startAirport = document.getElementById('origin-airport').value;
+            const destAirport = document.getElementById('destination-airport').value;
+
+            // Validate that start and destination airports are different
+            if (startAirport === destAirport) {
+                resultsContainer.innerHTML = '<div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 1rem; border-radius: 8px; color: #7f1d1d; font-weight: 600;">⚠️ Start and destination airports cannot be the same. Please select different airports.</div>';
+                return;
+            }
+
+            predictBtn.disabled = true;
+            resultsContainer.innerHTML = '<div class="loading-text"><div class="spinner"></div>Analyzing...</div>';
+
+            const depHour = parseInt(depHourInput.value);
+            const depBlock = getDepBlock(depHour);
+            const dayOfWeek = getDayOfWeek(dateInput.value);
+
+            try {
+                // Prepare scheduled arrival: accept time input 'HH:MM' and convert to HHMM integer
+                const schedVal = document.getElementById('scheduled-arrival').value;
+                let scheduled_arrival;
+                if (schedVal && schedVal.includes(':')) {
+                    const parts = schedVal.split(':');
+                    const hh = parseInt(parts[0], 10);
+                    const mm = parseInt(parts[1], 10);
+                    // Validate
+                    if (isNaN(hh) || isNaN(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+                        resultsContainer.innerHTML = '<div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 1rem; border-radius: 8px; color: #7f1d1d; font-weight: 600;">⚠️ Arrival time is invalid. Use 00:00–23:59.</div>';
+                        predictBtn.disabled = false;
+                        return;
+                    }
+                    scheduled_arrival = hh * 100 + mm;
+                } else {
+                    // Fallback: try to parse as integer HHMM
+                    scheduled_arrival = parseInt(schedVal, 10);
+                }
+
+                const payload = {
+                    date: dateInput.value,
+                    day_of_week: dayOfWeek,
+                    origin_airport: startAirport,
+                    destination_airport: destAirport,
+                    scheduled_arrival: scheduled_arrival,
+                    distance: parseFloat(document.getElementById('distance').value),
+                    dep_hour: depHour,
+                    dep_block: depBlock,
+                    airline: document.getElementById('airline').value
+                };
+
+                const res = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    const rc = data.risk_level.toLowerCase();
+                    resultsContainer.innerHTML = `
+                        <div class="results-section">
+                            <div class="results-grid">
+                                <div class="risk-badge ${rc}">
+                                    <div class="emoji">${data.emoji}</div>
+                                    <div class="label">${data.risk_level}</div>
+                                    <div class="percent">${data.proba_percent}</div>
+                                </div>
+                                <img src="${data.gauge_image}" class="gauge-image">
+                            </div>
+                            <div class="recommendation ${rc}">
+                                <strong>${data.emoji} ${data.risk_level}</strong>
+                                <ul>${data.recommendations.map(r => `<li>${r}</li>`).join('')}</ul>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultsContainer.innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
+                }
+            } catch (e) {
+                resultsContainer.innerHTML = `<p style="color:red;">Error: ${e.message}</p>`;
+            } finally {
+                predictBtn.disabled = false;
+            }
+        });
+
+        async function loadAnalytics() {
+            try {
+                const res = await fetch('/api/analytics');
+                const data = await res.json();
+                if (data.success) {
+                    const sc = document.getElementById('stats-chart');
+                    const hc = document.getElementById('hourly-chart');
+                    sc.src = data.stats_image;
+                    hc.src = data.hourly_image;
+                    sc.style.display = 'block';
+                    hc.style.display = 'block';
+                } else {
+                    const analyticsEl = document.getElementById('analytics');
+                    analyticsEl.innerHTML = `<div class="chart-card" style="background:#fff7f7;border:1px solid #fee2e2;color:#7f1d1d;">Error loading analytics: ${data.error}</div>`;
+                    console.error('Analytics error response:', data.error);
+                }
+            } catch (e) {
+                const analyticsEl = document.getElementById('analytics');
+                analyticsEl.innerHTML = `<div class="chart-card" style="background:#fff7f7;border:1px solid #fee2e2;color:#7f1d1d;">Error loading analytics. See console for details.</div>`;
+                console.error('Analytics error:', e);
+            }
+        }
+
+        // Check server/model status and disable predict if model missing
+        async function checkServerStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const statusEl = document.getElementById('server-status');
+                if (!data.success) {
+                    statusEl.style.display = 'block';
+                    statusEl.textContent = 'Server status unavailable';
+                    return;
+                }
+
+                if (!data.model_loaded || !data.features_loaded) {
+                    statusEl.style.display = 'block';
+                    statusEl.innerHTML = `⚠️ Model not loaded. Predictions disabled. <br>Model path: <code>${data.loaded_model_path || 'none'}</code><br>Feature path: <code>${data.loaded_feature_path || 'none'}</code>.`;
+                    predictBtn.disabled = true;
+                } else {
+                    statusEl.style.display = 'none';
+                    predictBtn.disabled = false;
+                }
+            } catch (e) {
+                console.error('Status check failed', e);
+            }
+        }
+
+        // Run status check on load
+        checkServerStatus();
+    </script>
+</body>
+</html>
