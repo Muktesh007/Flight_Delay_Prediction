@@ -252,6 +252,7 @@ For issues or questions:
 
 **Last Updated**: December 5, 2025
 
-**Model Accuracy**: 92%
+**Model Accuracy**: 72%
 
 **Uptime**: 99.2%
+
